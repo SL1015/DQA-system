@@ -9,9 +9,9 @@ CORS(app)
 def home():
     return "Hello world from Flask!"
 
-from apis.upload import upload_blueprint
-#app.register_blueprint(assessment_blueprint)
-app.register_blueprint(upload_blueprint)
+from apis.assessment import assessment_blueprint
+app.register_blueprint(assessment_blueprint)
+#app.register_blueprint(upload_blueprint)
 app.config['UPLOAD_FOLDER'] = r'c:\UZH\datasets\save'
 
 

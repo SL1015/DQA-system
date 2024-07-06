@@ -17,23 +17,24 @@ import joblib
 from io import BytesIO
 import xgboost
 
-upload_blueprint = Blueprint('upload', __name__)
+assessment_blueprint = Blueprint('assessment', __name__)
 
-@upload_blueprint.route('/upload', methods=['POST'])
+@assessment_blueprint.route('/assessment', methods=['POST'])
 def upload_for_assessment():
-    
+    '''Initial data processing'''
+    # Check if the post request contains dataset and label column
     if 'file'not in request.files or 'labelColumn' not in request.form:
         return jsonify({'error': 'No file or label column provided'}), 400
-
     file = request.files['file']
-    model_file = request.files['modelFile']
-    if model_file:
+    label_column = request.form['labelColumn']
+    # Check if the post request contains model file
+    if 'modelFile' in request.files:
+        model_file = request.files['modelFile']
         model_in_memory = BytesIO(model_file.read())
         model = joblib.load(model_in_memory)
     else:
         model = None
-         
-    label_column = request.form['labelColumn']
+    # Extract the weights
     extra_fields_weight = float(request.form.get('extra_fields', 0.5))
     inconsistent_column_weight = float(request.form.get('inconsistent_column'))
     missing_values_ratio_weight = float(request.form.get('missing_values_ratio'))
@@ -51,14 +52,13 @@ def upload_for_assessment():
     pillar_uniqueness_weight = float(request.form.get('uniqueness_weight'))
     pillar_consistency_weight = float(request.form.get('consistency_weight'))
 
+    # Read the file and convert it to a DataFrame
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
-
     if file:
         filename = secure_filename(file.filename)
         file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
         file.save(file_path)
-
         if 'pcap.netflow' in filename:
             with open(file_path, 'r') as file:
                 pattern = '[ \t,;]+'
@@ -67,12 +67,10 @@ def upload_for_assessment():
                 line = file.readline().strip()
                 headers = re.split(pattern, line)
                 print("Headers:", headers)
-                
                 for line in file:
                     line = line.strip()
                     fields  = re.split(pattern, line)
                     row = {}
-                    
                     for index, field in enumerate(fields):
                         if index < len(headers):
                             row[headers[index]] = field
@@ -81,28 +79,20 @@ def upload_for_assessment():
                             if 'extra_fields' not in row:
                                 row['extra_fields'] = []
                             row['extra_fields'].append(field)
-                    
                     # If extra fields are collected, join them into a single string
                     if 'extra_fields' in row:
                         row['extra_fields'] = ' '.join(row['extra_fields'])
                         
                     document.append(row)
-        
             # Convert the document list to a DataFrame
             df = pd.DataFrame(document)
-            print(df.head)
             if label_column not in df.columns:
                 return jsonify({'error': f'Label column "{label_column}" not found in dataset'}), 400
-            
-            # # If 'extra_fields' column exists, drop it
-            # if 'extra_fields' in df.columns:
-            #     df.drop(columns=['extra_fields'], inplace=True)
-        
         else:
             with open(file_path, 'r') as file:
                 document = []
                 reader = csv.reader(file)
-                headers = next(reader)  # 读取文件的第一行作为标题
+                headers = next(reader)  
                 print("Headers:", headers)
         
                 for line in reader:
@@ -116,28 +106,25 @@ def upload_for_assessment():
                         else:
                             if 'extra_fields' not in row:
                                 row['extra_fields'] = []
-                            row['extra_fields'].append(field)
-                    # if 'extra_fields' in row:
-                    #     row['extra_fields'] = ' '.join(row['extra_fields'])                   
+                            row['extra_fields'].append(field)                
                     document.append(row)
             # Convert the document list to a DataFrame
             df = pd.DataFrame(document)
             if label_column not in df.columns:
                 return jsonify({'error': f'Label column "{label_column}" not found in dataset'}), 400
-            # If 'extra_fields' column exists, drop it
-            # if 'extra_fields' in df.columns:
-            #     df.drop(columns=['extra_fields'], inplace=True)
-            print(df.head())
 
+        print(df.head())
+
+        '''Define the function to calculate all the metrics'''
         def cal_metrics(df, label_column):
             metrics = {}
             num_rows = len(df)
             num_cells = df.size
-            num_columns = df.shape[1]
+            num_columns = df.shape[1] - 1  # Exclude the label column
 
-            '''----------------------Traditional pillars---------------------'''
+            '''Traditional pillars'''
 
-            '''--------extra fields (Structual consistency)----------'''
+            '''Extra fields: the ratio of rows with extra fields'''
             if 'extra_fields' in df.columns:
                 non_null_count = df['extra_fields'].notnull().sum()
                 extra_fields_ratio = non_null_count / num_rows
@@ -149,13 +136,13 @@ def upload_for_assessment():
                 metrics['extra_fields'] = 1
                 print("Column 'extra_field' does not exist in the DataFrame.")
 
-            '''--------Missing Values----------'''
+            '''Missing Values Ratio: the ratio of missing values in the dataset'''
             missing_values_ratio = df.isnull().mean()
-            missing_values_ratio_dict = {col: float(ratio) for col, ratio in zip(missing_values_ratio.index, missing_values_ratio.values)}
+            #missing_values_ratio_dict = {col: float(ratio) for col, ratio in zip(missing_values_ratio.index, missing_values_ratio.values)}
             average_missing_values_ratio = missing_values_ratio.mean()
             metrics['missing_values_ratio'] = 1 - float(average_missing_values_ratio)
 
-            '''--------Inconsistent column----------'''
+            '''Inconsistent column ratio: the ratio of columns with inconsistent data types'''
             inconsistent_column = 0
             for column in df.columns:
                 if df[column].apply(lambda x: isinstance(x, list)).any():
@@ -167,19 +154,18 @@ def upload_for_assessment():
             inconsistent_column_ratio = inconsistent_column / num_columns
             metrics['inconsistent_column'] = 1 - inconsistent_column_ratio
 
-            '''--------duplicate rows----------'''
+            '''Duplicate rows: the ratio of duplicate rows in the dataset'''
             duplicate_rows = df.duplicated().sum()
             duplicate_rows_ratio = duplicate_rows / num_rows
             metrics['duplicate_rows'] = 1 - duplicate_rows_ratio
 
-            '''--------duplicate columns----------'''
+            '''Duplicate columns: the ratio of columns with the same values'''
             duplicate_columns = {}
             columns = df.columns
             for i in range(len(columns)):
                 col1 = columns[i]
                 for j in range(i + 1, len(columns)):
                     col2 = columns[j]
-                    # 判断两个列是否相等
                     if df[col1].equals(df[col2]):
                         if col1 in duplicate_columns:
                             duplicate_columns[col1].append(col2)
@@ -189,19 +175,18 @@ def upload_for_assessment():
             duplicate_columns_ratio = total_duplicate_columns / num_columns
             metrics['duplicate_columns'] = 1 - duplicate_columns_ratio
 
-            '''--------constant features----------'''
+            '''Constant features: the ratio of columns with only one unique value'''
             unique_counts = df.nunique()
             one_unique_value_columns = unique_counts[unique_counts == 1]
             num_one_unique_value_columns = len(one_unique_value_columns)
             constant_feature_ratio = num_one_unique_value_columns / num_columns
             metrics['constant_features'] = 1 - constant_feature_ratio
 
-            '''----------------------AI pillars---------------------'''
+            '''AI pillars'''
 
-            '''--------outlier ratio (Z-score)----------'''
+            '''Outlier ratio (Z-score)'''
             total_outliers = 0
             total_numeric_entries = 0
-            
             # Iterate through each column to determine its type
             for column in df.columns:
                 if pd.api.types.is_numeric_dtype(df[column]):
@@ -213,7 +198,6 @@ def upload_for_assessment():
                     total_outliers += np.sum(outliers)
                     # Update the total number of numeric entries
                     total_numeric_entries += len(valid_data)
-            print(total_numeric_entries)
 
             if total_numeric_entries > 0:
                 outlier_ratio = total_outliers / total_numeric_entries
@@ -222,15 +206,13 @@ def upload_for_assessment():
             metrics['outlier_ratio'] = 1 - outlier_ratio
             print("outlier calculated.")
 
-            '''--------label purity----------'''
-            # 计算label pattern一致性得分
+            '''Label purity: the ratio of consistent data types and patterns in the label column'''
             df[label_column] = df[label_column].astype(str)
             num_classes = df[label_column].nunique()
-            print(num_classes)
+            print(f"The dataset contains {num_classes} classes.")
 
             unique_values = df[label_column].unique()
-            print("Unique values in the label column:")
-            print(unique_values)
+            print(f"Unique values in the label column: {unique_values}")
             
             def detect_label_type_consistency(df, label_column):
                 if df[label_column].apply(lambda x: x.isnumeric()).all():
@@ -244,31 +226,28 @@ def upload_for_assessment():
                 num_rows = len(df[label_column])  
                 for label in df[label_column]:
                     # detect patterns of label
-                    pattern = re.sub(r'[A-Za-z]+', 'A', label)  # 将所有连续字母替换为 'A'
-                    pattern = re.sub(r'[0-9]+', '0', pattern)  # 将所有连续数字替换为 '0'
-                    
+                    pattern = re.sub(r'[A-Za-z]+', 'A', label)  # replace all continuing letters with 'A'
+                    pattern = re.sub(r'[0-9]+', '0', pattern)  # replace all continuing numbers with '0'                    
                     if pattern in pattern_counts:
-                        pattern_counts[pattern] += 1  # 模式已存在，计数加一
+                        pattern_counts[pattern] += 1  
                     else:
-                        pattern_counts[pattern] = 1  # 模式不存在，初始化计数为一
-                # 计算每种模式的频率
+                        pattern_counts[pattern] = 1  
+                # calculte the frequency of each pattern
                 pattern_frequencies = {pattern: count / num_rows for pattern, count in pattern_counts.items()}
                 return pattern_frequencies
             
             def calculate_pattern_consistency_score(df, label_column):
                 pattern_frequencies = detect_label_pattern_consistency(df, label_column)
-                # 提取频率值
                 frequencies = list(pattern_frequencies.values())
-                # 计算熵
                 pattern_entropy = entropy(frequencies)
-                # 归一化熵值到0到1的范围内（假设最大熵为log(模式数量)）
+                # normalize pattern entropy to range from 0 to 1 (assuming the max entropy is log(number of patterns))
                 max_entropy = np.log(len(frequencies)) if frequencies else 1
                 normalized_entropy = pattern_entropy / max_entropy if max_entropy > 0 else 0
-                # 反转熵值使其成为一致性度量（熵越大，一致性越低）
+                # the higher the normalized entropy, the lower the consistency score
                 consistency_score = 1 - normalized_entropy
                 return consistency_score
             
-            def calculate_combined_label_consistency_score(df, label_column, pattern_weight=0.5, type_weight=0.5):
+            def calculate_combined_label_consistency_score(df, label_column, pattern_weight=0.7, type_weight=0.3):
                 pattern_consistency_score = calculate_pattern_consistency_score(df, label_column)
                 type_consistency_score = detect_label_type_consistency(df, label_column)
                 combined_consistency_score = pattern_weight * pattern_consistency_score + type_weight * type_consistency_score
@@ -278,43 +257,34 @@ def upload_for_assessment():
             metrics['label_purity'] = label_consistency_score
             print("label purity calculated")
             
-            '''--------class imbalance ratio----------'''
+            '''Class imbalance ratio'''
             # metric: gini index, the lower the gini index, the more balanced the classes
             df_drop_na_labels = df.dropna(subset=[label_column])
             class_counts = df_drop_na_labels[label_column].value_counts()
             class_probabilities = class_counts / num_rows
             gini_index = 1 - np.sum(class_probabilities ** 2)
-            metrics['class_imbalance_ratio'] = 1 - gini_index # gini index itself represents class imbalance ratio
+            metrics['class_imbalance_ratio'] = 1 - gini_index 
             print("class imbalance calculated")
 
-            '''--------feature importance----------'''
+            '''Feature importance: mutual information or model-based methods'''
             def cal_mutual_information(df, label_column):
                 # metric: mutual information
                 X = df.drop(columns=[label_column])
                 y = df[label_column]
-                print(y[:10])
+                # encode the categorical features to float
                 label_encoders = {}
                 for column in X.select_dtypes(include=['object']).columns:
                     le = LabelEncoder()
                     X[column] = le.fit_transform(X[column])
                     label_encoders[column] = le
-                
-                print("encoder done")
-                
                 # mi_classif = mutual_info_classif(X, y)
                 # feature_relevance_dict = {col: float(score) for col, score in zip(X.columns, mi_classif)}
-
-                # 检查数据类型并转换为浮点数
                 X = X.apply(pd.to_numeric, errors='coerce')
                 y = LabelEncoder().fit_transform(y)
-                # 处理缺失值
-                # 删除包含缺失值的行
                 combined = pd.concat([X, pd.Series(y, name=label_column, index=X.index)], axis=1)
                 combined = combined.dropna()
-
                 X_encoded = combined.drop(columns=[label_column])
                 y_encoded = combined[label_column]
-                #mi_scores = {col: normalized_mutual_information(X.iloc[:, i], y) for i, col in enumerate(df.drop(columns=[label_column]).columns)}
                 mi_scores = {col: normalized_mutual_info_score(X.iloc[:, i], y) for i, col in enumerate(df.drop(columns=[label_column]).columns)}
                 return mi_scores, X_encoded, y_encoded
 
@@ -322,37 +292,27 @@ def upload_for_assessment():
                 if model:
                     print("model exists")
                     feature_importances = model.feature_importances_
-                    # 计算25%和75%分位数
                     lower_quantile = np.percentile(feature_importances, 25)
                     upper_quantile = np.percentile(feature_importances, 75)
-                    # 分配权重
+                    # assign weights based on quantiles
                     weights = np.where(feature_importances <= lower_quantile, 1,
                                     np.where(feature_importances >= upper_quantile, 2, 0.5))
-                    # 计算加权特征重要性
                     weighted_importances = feature_importances * weights
-                    # 实际加权总和
                     actual_total = np.sum(weighted_importances)
-                    # 计算可能的最小总和和最大总和
                     min_total = np.sum(feature_importances * np.min(weights))
                     max_total = np.sum(feature_importances * np.max(weights))
-                    # 归一化总分
                     normalized_total_score = (actual_total - min_total) / (max_total - min_total)
                     metric_feature_importance = normalized_total_score
-
                 else:
+                    # calculate the ratio of relevant features
                     mi_scores, _, _ = cal_mutual_information(df, label_column)
-                    low_relevancy_features = [col for col, mi in mi_scores.items() if mi <= 0.1]
-                    low_relevancy_features_ratio = len(low_relevancy_features) / (num_columns-1)
-                    metric_feature_importance = 1 - low_relevancy_features_ratio
-
+                    relevant_features = [col for col, mi in mi_scores.items() if mi >= 0.1]
+                    metric_feature_importance = len(relevant_features) / (num_columns-1)
                 return metric_feature_importance
-            
             metrics['feature_relevance'] = cal_feature_importance(df, label_column, model)
 
-            
-
-            '''--------target leakage----------'''
-            #threshold = 0.95
+            '''Target leakage: features that highly relevant to the label column'''
+            # Based on feature importance, threshold = 0.95
             mi_scores, X_encoded, y_encoded = cal_mutual_information(df, label_column)
             target_leakage_features = [col for col, mi in mi_scores.items() if mi >= 0.95]
             num_target_leakage_features = len(target_leakage_features)
@@ -360,15 +320,14 @@ def upload_for_assessment():
             metrics['target_leakage_ratio'] = 1 - target_leakage_ratio
             print("target leakage calculated")
 
-
-            '''--------feature correlation----------'''
-            # based on mutual infomation, threshold = 0.8
+            '''Feature correlation: the ratio of highly dependent features'''
+            # Based on mutual infomation, threshold = 0.8
             X_df = pd.DataFrame(X_encoded, columns=df.drop(columns=[label_column]).columns)
             corr_column = X_df.columns
             n_features = len(corr_column)
             correlation_matrix = pd.DataFrame(np.zeros((len(corr_column), len(corr_column))), index=corr_column, columns=corr_column)
             highly_dependent_count = 0
-            total_feature_pairs = (n_features * (n_features - 1)) / 2  # 计算特征对总数
+            total_feature_pairs = (n_features * (n_features - 1)) / 2  
 
             for i, col1 in enumerate(corr_column):
                 for j, col2 in enumerate(corr_column):
@@ -380,16 +339,14 @@ def upload_for_assessment():
                             highly_dependent_count += 1
 
             highly_dependent_rate = highly_dependent_count / total_feature_pairs if total_feature_pairs > 0 else 0
-
-            feature_correlation_dict = {
-                f'{feature1}_and_{feature2}': float(correlation_matrix.loc[feature1, feature2])
-                for feature1 in corr_column for feature2 in corr_column if feature1 != feature2
-            }
-
+            # feature_correlation_dict = {
+            #     f'{feature1}_and_{feature2}': float(correlation_matrix.loc[feature1, feature2])
+            #     for feature1 in corr_column for feature2 in corr_column if feature1 != feature2
+            # }
             metrics['feature_correlation'] = 1 - highly_dependent_rate
             print("feature correlation calculated")
 
-            '''----------------------Construct weights and pillars dict---------------------'''
+            '''Construct weights and pillars dict'''
 
             weights = {
                 'extra_fields': extra_fields_weight,
@@ -482,61 +439,54 @@ def upload_for_assessment():
                 }
                 return pillars
             
+            '''Transform the scores to percentage'''
             def transform_scores(dict):
                 transformed_dict = {}
                 for pillar_name, metrics in dict.items():
                     transformed_metrics = {}
                     for metric_name, value in metrics.items():
-                        # 将值从0-1转换为1-100并保留一位小数
                         transformed_value = round(value * 100, 1)
                         transformed_metrics[metric_name] = transformed_value
                     transformed_dict[pillar_name] = transformed_metrics
                 return transformed_dict
             
+            '''Calculate the weighted average of the metric values'''
             def weighted_average(metric_values, weights):
                 total_weight = sum(weights)
                 normalized_weights = [w / total_weight for w in weights]
                 weighted_avg = sum(s * w for s, w in zip(metric_values, normalized_weights))
                 return weighted_avg
             
+            '''Calculate pillar scores'''
             def pillar_aggregator(metrics, weights, metric_names):
                 values = [metrics[name] for name in metric_names]
                 pillar_wise_weights = [weights[name] for name in metric_names]
                 return weighted_average(values, pillar_wise_weights)
 
+            '''Calculate overall score'''
             def overall_aggregator(metrics, weights):
                 pillars = {}
-
                 for pillar_name, metric_scores in metrics.items():
                     pillar_weights = weights[pillar_name]
                     metric_names = list(metric_scores.keys())
                     pillar_score = pillar_aggregator(metric_scores, pillar_weights, metric_names)
                     metric_scores['pillar_score'] = pillar_score
                     pillars[pillar_name] = metric_scores
-
                 overall_pillar_scores = [pillar['pillar_score'] for pillar in pillars.values()]
                 overall_pillar_weights = [weights['pillar_score'] for weights in weights.values()]
                 overall_score = weighted_average(overall_pillar_scores, overall_pillar_weights)
-
                 pillars = transform_scores(pillars)
-
                 overall_score = round(overall_score * 100, 1)
                 pillars['overall'] = overall_score
-                
                 return pillars
-
+            
             metrics_construct = construct_pillars_dict(metrics)
             weights_construct = construct_weights_dict(weights)
-
             # calculate all the pillar scores and overall score, write them to the dicts
             pillars = overall_aggregator(metrics_construct, weights_construct)
-            
             return pillars
         
-        print(len(df))
-        #label_column = "Label(LEGITIMATE:Botnet:Background)"
         pillars_response = cal_metrics(df, label_column)
-        print(df.head())
         print(pillars_response)
         
     # Respond back to the frontend

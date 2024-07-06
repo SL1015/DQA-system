@@ -276,7 +276,7 @@ export default {
         // if (this.$router.currentRoute.name !== targetRouteName) {
         //   this.$router.push({ name: targetRouteName, params: isLoadingRouteParam });
         // }
-        const response = await fetch('http://localhost:5000/upload', {
+        const response = await fetch('http://localhost:5000/assessment', {
           method: 'POST',
           body: formData,
         });
