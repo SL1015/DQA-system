@@ -64,11 +64,15 @@ The existence of extra fields indicates that some samples do not conform to the 
               step="0.1"
               required
               @input.native="validateFormData"
+              data-toggle="tooltip"
+              title="Please setup the weight for Inconsistent Column Rate. The weight should be between 0 and 1.
+The existence of inconsistent columns indicates that some samples do not conform to the correct format."
             />
           </div>
 
           <div class="col-md-4 pl-md-1">
-            <h4 class="text-primary">Uniqueness</h4>
+            <h4 class="text-primary" data-toggle="tooltip"
+            title="Uniqueness refers to the extent to which records in a dataset are distinct and not duplicated.">Uniqueness</h4>
             <base-input
               label="Overall Weight"
               type="number"
@@ -76,6 +80,8 @@ The existence of extra fields indicates that some samples do not conform to the 
               step="0.1"
               required
               @input.native="validateFormData"
+              data-toggle="tooltip"
+              title="Please setup the overall weight for Uniqueness pillar. The weight should be between 0 and 1."
             />
             <base-input
               label="Duplicate Row Rate"
@@ -84,6 +90,9 @@ The existence of extra fields indicates that some samples do not conform to the 
               step="0.1"
               required
               @input.native="validateFormData"
+              data-toggle="tooltip"
+              title="Please setup the weight for Duplicate Row Rate. The weight should be between 0 and 1.
+The existence of duplicate rows indicates that some samples are repeated in the dataset."
             />
             <base-input
               label="Duplicate Column Rate"
@@ -92,10 +101,16 @@ The existence of extra fields indicates that some samples do not conform to the 
               step="0.1"
               required
               @input.native="validateFormData"
+              data-toggle="tooltip"
+              title="Please setup the weight for Duplicate Column Rate. The weight should be between 0 and 1.
+Duplicate columns increase the dimensionality of the feature space without adding new information, 
+which is more prone to overfitting, and results in higher computational costs."
             />
           </div>
           <div class="col-md-4 px-md-1">
-            <h4 class="text-primary">Completeness</h4>
+            <h4 class="text-primary" data-toggle="tooltip"
+              title="Completeness is defined as the extent to which data are not missing 
+and have sufficient breadth, depth and scope for the task at hand.">Completeness</h4>
             <base-input
               label="Overall Weight"
               type="number"
@@ -103,12 +118,16 @@ The existence of extra fields indicates that some samples do not conform to the 
               step="0.1"
               required
               @input.native="validateFormData"
+              data-toggle="tooltip"
+              title="Please setup the overall weight for Completeness pillar. The weight should be between 0 and 1."
             />
           </div>
         </div>
         <div class="row">
           <div class="col-md-4 pr-md-1">
-            <h4 class="text-primary">Outlier Detection</h4>
+            <h4 class="text-primary" data-toggle="tooltip"
+              title="Outliers are data points that are significantly different from other data points. 
+Outlier detection helps to detect noise or errors in the dataset.">Outlier Detection</h4>
             <base-input
               label="Overall Weight"
               type="number"
@@ -116,10 +135,15 @@ The existence of extra fields indicates that some samples do not conform to the 
               step="0.1"
               required
               @input.native="validateFormData"
+              data-toggle="tooltip"
+              title="Please setup the overall weight for Outlier Detection pillar. The weight should be between 0 and 1."
             />
           </div>
           <div class="col-md-4 px-md-1">
-            <h4 class="text-primary">Class Parity</h4>
+            <h4 class="text-primary" data-toggle="tooltip"
+              title="Class parity measures how evenly the classes are distributed in a dataset. 
+Class imbalance might lead to a bias in machine learning models, favoring the majority class."
+>Class Parity</h4>
             <base-input
               label="Overall Weight"
               type="number"
@@ -127,10 +151,13 @@ The existence of extra fields indicates that some samples do not conform to the 
               step="0.1"
               required
               @input.native="validateFormData"
+              data-toggle="tooltip"
+              title="Please setup the overall weight for Class Parity pillar. The weight should be between 0 and 1."
             />
           </div>
           <div class="col-md-4 pl-md-1">
-            <h4 class="text-primary">Label Purity</h4>
+            <h4 class="text-primary" data-toggle="tooltip" title="Label purity measures the level of label consistency. 
+Inconsistent labels, which occur when similar instances have different labels, introduce noise and confusion into the training data, leading to lower accuracy and poor generalization to new data.">Label Purity</h4>
             <base-input
               label="Overall Weight"
               type="number"
@@ -138,12 +165,14 @@ The existence of extra fields indicates that some samples do not conform to the 
               step="0.1"
               required
               @input.native="validateFormData"
+              data-toggle="tooltip"
+              title="Please setup the overall weight for Label Purity pillar. The weight should be between 0 and 1."
             />
           </div>
         </div>
         <div class="row">
           <div class="col-md-4 pr-md-1">
-            <h4 class="text-primary">Feature Relevance</h4>
+            <h4 class="text-primary" data-toggle="tooltip" title=" Feature relevance analyzes the relative importance of each feature with respect to the target variable or class.">Feature Relevance</h4>
             <base-input
               label="Overall Weight"
               type="number"
@@ -151,6 +180,8 @@ The existence of extra fields indicates that some samples do not conform to the 
               step="0.1"
               required
               @input.native="validateFormData"
+              data-toggle="tooltip"
+              title="Please setup the overall weight for Feature Relevance pillar. The weight should be between 0 and 1."
             />
             <base-input
               label="Constant Feature Rate"
@@ -159,6 +190,10 @@ The existence of extra fields indicates that some samples do not conform to the 
               step="0.1"
               required
               @input.native="validateFormData"
+              data-toggle="tooltip"
+              title="Please setup the weight for Constant Feature Rate. The weight should be between 0 and 1.
+Constant feature ratio refers to the proportion of features in a dataset that have the same value across all samples.
+Constant features provide no discriminative value for the model."
             />
             <base-input
               label="Feature Importance"
@@ -167,10 +202,14 @@ The existence of extra fields indicates that some samples do not conform to the 
               step="0.1"
               required
               @input.native="validateFormData"
+              data-toggle="tooltip"
+              title="Please setup the weight for Feature Importance. The weight should be between 0 and 1.
+Feature importance measures the relevance of each feature to the target variable or class."
             />
           </div>
           <div class="col-md-4 px-md-1">
-            <h4 class="text-primary">Feature Correlation</h4>
+            <h4 class="text-primary" data-toggle="tooltop" title="Feature correlation refers to the statistical relationship between two or more features in a dataset. It measures how changes in one feature are associated with changes in another feature.
+High correlation between features can indicate redundancy, while low correlation can suggest independence.">Feature Correlation</h4>
             <base-input
               label="Overall Weight"
               type="number"
@@ -178,10 +217,13 @@ The existence of extra fields indicates that some samples do not conform to the 
               step="0.1"
               required
               @input.native="validateFormData"
+              data-toggle="tooltip"
+              title="Please setup the overall weight for Feature Correlation pillar. The weight should be between 0 and 1."
             />
           </div>
           <div class="col-md-4 pl-md-1">
-            <h4 class="text-primary">Target Leakage</h4>
+            <h4 class="text-primary" data-toggle="tooltip" title="Target leakage occurs when a model includes features that contain information unavailable
+at the time of prediction, leading to biased predictions.">Target Leakage</h4>
             <base-input
               label="Overall Weight"
               type="number"
@@ -189,6 +231,8 @@ The existence of extra fields indicates that some samples do not conform to the 
               step="0.1"
               required
               @input.native="validateFormData"
+              data-toggle="tooltip"
+              title="Please setup the overall weight for Target Leakage pillar. The weight should be between 0 and 1."
             />
           </div>
         </div>
